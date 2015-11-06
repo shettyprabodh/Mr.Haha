@@ -155,9 +155,11 @@ class InputProtocolManager {
       break;
     case KEYBOARD:
       input_buf_int = get_input_buf_int();
-      if (input_buf_length < 2)
+      Serial.print(input_buf_length);
+      Serial.println(input_buf_int);
+      if (input_buf_length == 0)
         input_buf[input_buf_length ++] = code;
-      else if (input_buf_length == 2) {
+      else if (input_buf_length == 1) {
         if (input_buf_int > 21)
           input_buf[input_buf_length ++] = code;
         else {
