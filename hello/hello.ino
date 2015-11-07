@@ -10,6 +10,8 @@
 #include "HMC5883L.h"
 #include "ITG3200.h"
 
+#define M_PI 3.14159265359
+
 class KeyStroke {  
 public:
   enum SplKey {
@@ -211,6 +213,10 @@ int16_t ax, ay, az;
 int16_t cx, cy, cz;
 int16_t gx, gy, gz;
 
+uint32_t timer;
+
+double pitch, roll, yaw, pitch_acc, roll_acc, yaw_acc;
+
 InputProtocolManager input_manager;
 
 const int button_pin = 36;
@@ -233,27 +239,58 @@ void setup() {
   Serial.println(accel.testConnection() ? "BMA150 connection successful" : "BMA150 connection failed");
   Serial.println(compass.testConnection() ? "HMC5883L connection successful" : "HMC5883L connection failed");
   Serial.println(gyro.testConnection() ? "ITG3200 connection successful" : "ITG3200 connection failed");
+  
+  accel.getAcceleration(&ax, &ay, &az);
+  gyro.getRotation(&gx, &gy, &gz);
+  
+  pitch_acc = atan2((double)az, (double)ay) * 180 / M_PI;
+  roll_acc = atan2((double)ax, (double)az) * 180 / M_PI;
+  yaw_acc = atan2((double)ay, (double)ax) * 180 / M_PI;
+  
+  pitch = pitch_acc;
+  roll = roll_acc;
+  yaw = yaw_acc;
+  
+  timer = micros();        //Initialize timer
+  
 }
 
 void loop() {
-  if (digitalRead(button_pin)) {
+//  if (digitalRead(button_pin)) {
     // read raw gyro measurements from device
     accel.getAcceleration(&ax, &ay, &az);
     //Serial.println(get_accel_code(ax, ay, az));
     input_manager.register_input(ax, ay, az);
     input_manager.serial_print();
     //compass.getHeading(&cx, &cy, &cz);
-    //gyro.getRotation(&gx, &gy, &gz);
-    //Serial.print("gyro:\t");
-    //Serial.print(gx);Serial.print("\t");
-    //Serial.print(gy);Serial.print("\t");
-    //Serial.println(gz);
-    //Serial.print("accel:\t");
-    //Serial.print(ax);Serial.print("\t");
-    //Serial.print(ay);Serial.print("\t");
-    //Serial.println(az);  
+    gyro.getRotation(&gx, &gy, &gz);
+    
+    double dt = (double)(micros() - timer) / 1000000; // Calculate delta time
+    timer = micros();
+    
+    pitch += ((double)gx / 14.375) * dt;            //Raw gyro data
+    roll += ((double)gy / 14.375) * dt;
+    yaw += ((double)gz / 14.375) * dt;
+    
+    int forceMagnitudeApprox = abs(ax) + abs(ay) + abs(az);
+    if (forceMagnitudeApprox > 8192 && forceMagnitudeApprox < 32768)
+    {
+      pitch_acc = atan2((double)az, (double)ay) * 180 / M_PI;          //Raw accel data
+      roll_acc = atan2((double)ax, (double)az) * 180 / M_PI;
+      yaw_acc = atan2((double)ay, (double)ax) * 180 / M_PI;
+      
+      pitch = pitch * 0.98 + pitch_acc * 0.02;
+      roll = roll * 0.98 + roll_acc * 0.02;
+      yaw = yaw * 0.98 + yaw_acc * 0.02;
+    }
+    
+    Serial.print("Pitch, Roll, Yaw:\t");
+    Serial.print(pitch); Serial.print("\t");
+    Serial.print(roll); Serial.print("\t");
+    Serial.println(yaw);
+      
     delay(500);
- }
+// }
   // display tab-separated accel x/y/z values
   //    Serial.print("accel:\t");
   //    Serial.print(ax); Serial.print("\t");
