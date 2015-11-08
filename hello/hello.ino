@@ -61,7 +61,7 @@ public:
     Serial.print("Key code: ");
     Serial.println(code);
     if (code < 26)
-      set(code + 'a');
+      set((char)code + 'a');
     else
      set('x');
   }
@@ -93,6 +93,15 @@ class InputProtocolManager {
   int input_buf[3];
   int input_buf_length;
   KeyStroke next_key;
+  
+  double pitch;
+  double roll;
+  double yaw;
+  double pitch_acc;
+  double roll_acc;
+  double yaw_acc;
+  
+  uint32_t timer;
 
   int get_accel_code(int16_t x, int16_t y, int16_t z) {
     if (abs(x) > abs(y) && abs(x) > abs(z)) 
@@ -183,18 +192,65 @@ class InputProtocolManager {
           next_key.set_from_key_code(input_buf_int);
       }
     break;
+    case ROBOT:
+      if (code < 5) {
+        Serial.print("Robot: ");
+        Serial.println(code);
+        Serial1.println(code);
+      }
+      else 
+        mode = SELECT;
+    break;
     default:
-      Serial.print(mode);
-      Serial.println(" mode not yet implemented. Switching back to SELECT");
-      mode = SELECT;
+      //Serial.print(mode);
+      //Serial.println(" mode not yet implemented. Switching back to SELECT");
+      //mode = SELECT;
     break;
     }
   }
 
 public:
-  void register_input (int16_t ax, int16_t ay, int16_t az) {
-    register_input_code(get_accel_code(ax, ay, az));
-    Serial.println(get_accel_code(ax, ay, az));
+  InputProtocolManager()
+  : pitch(0.0),
+    roll(0.0),
+    yaw(0.0),
+    pitch_acc(0.0),
+    roll_acc(0.0),
+    yaw_acc(0.0),
+    timer(micros())       //Initialize timer
+  {}
+  
+  void register_input (int16_t ax, int16_t ay, int16_t az, int16_t gx, int16_t gy, int16_t gz) {
+    if (mode != MOUSE) {
+      register_input_code(get_accel_code(ax, ay, az));
+      Serial.print("Code: ");
+      Serial.println(get_accel_code(ax, ay, az));
+    }
+    else {
+      Serial.print('$');
+      Serial.print(pitch); Serial.print("\t");
+      Serial.print(roll); Serial.print("\t");
+      Serial.println(yaw);
+    }
+    // Estimate orientation from gyroscope
+    double dt = (double)(micros() - timer) / 1000000; // Calculate delta time
+    timer = micros();
+    
+    pitch += ((double)gx / 14.375) * dt;            //Raw gyro data
+    roll += ((double)gy / 14.375) * dt;
+    yaw += ((double)gz / 14.375) * dt;
+    
+    int forceMagnitudeApprox = abs(ax) + abs(ay) + abs(az);
+    if (forceMagnitudeApprox > 200 && forceMagnitudeApprox < 500)
+    {
+      pitch_acc = atan2((double)az, (double)ay) * 180 / M_PI;          //Raw accel data
+      roll_acc = atan2((double)ax, (double)az) * 180 / M_PI;
+      yaw_acc = atan2((double)ay, (double)ax) * 180 / M_PI;
+    
+      pitch = pitch * 0.98 + pitch_acc * 0.02;
+      roll = roll * 0.98 + roll_acc * 0.02;
+      yaw = yaw * 0.98 + yaw_acc * 0.02;
+    }
   }
 
   void serial_print() {
@@ -206,6 +262,21 @@ public:
       Serial.print ("Mode: ");
       Serial.println(mode);
     }
+  }
+  
+  int16_t get_loop_delay() {
+    if (mode == MOUSE)
+      return 100;
+    else if(mode == ROBOT)
+      return 1000;
+    else
+      return 500;
+  }
+  
+  bool wait_for_button() {
+    if (mode == MOUSE)
+      return false;
+     return true;
   }
 };
 
@@ -222,8 +293,6 @@ int16_t gx, gy, gz;
 int x_trans = 0, n = 0;                 //For Bot control
 
 uint32_t timer;
-
-double pitch, roll, yaw, pitch_acc, roll_acc, yaw_acc;
 
 InputProtocolManager input_manager;
 
@@ -256,31 +325,12 @@ void setup() {
   //roll_acc = atan2((double)ax, (double)az) * 180 / M_PI;
   //yaw_acc = atan2((double)ay, (double)ax) * 180 / M_PI;
   
-  pitch_acc = 0;
-  roll_acc = 0;
-  yaw_acc = 0;
-  
-  pitch = pitch_acc;
-  roll = roll_acc;
-  yaw = yaw_acc;
-  
-  timer = micros();        //Initialize timer
-  
 }
 
 void loop() {
-//  if (digitalRead(button_pin)) {
+ if (digitalRead(button_pin) || !input_manager.wait_for_button()) {
     // read raw gyro measurements from device
-    if(n % 2 == 0)
-      Serial1.println(0);
-    else
-      {
-      x_trans++;
-      Serial1.println(x_trans % 5);
-      Serial.println(x_trans % 5);
-      
-      }
-      n++;
+   
     
     accel.getAcceleration(&ax, &ay, &az);
     //Serial.println(get_accel_code(ax, ay, az));
@@ -289,24 +339,7 @@ void loop() {
     //compass.getHeading(&cx, &cy, &cz);
     gyro.getRotation(&gx, &gy, &gz);
     
-    double dt = (double)(micros() - timer) / 1000000; // Calculate delta time
-    timer = micros();
     
-    pitch += ((double)gx / 14.375) * dt;            //Raw gyro data
-    roll += ((double)gy / 14.375) * dt;
-    yaw += ((double)gz / 14.375) * dt;
-    
-    int forceMagnitudeApprox = abs(ax) + abs(ay) + abs(az);
-    if (forceMagnitudeApprox > 200 && forceMagnitudeApprox < 500)
-    {
-      pitch_acc = atan2((double)az, (double)ay) * 180 / M_PI;          //Raw accel data
-      roll_acc = atan2((double)ax, (double)az) * 180 / M_PI;
-      yaw_acc = atan2((double)ay, (double)ax) * 180 / M_PI;
-      
-      pitch = pitch * 0.98 + pitch_acc * 0.02;
-      roll = roll * 0.98 + roll_acc * 0.02;
-      yaw = yaw * 0.98 + yaw_acc * 0.02;
-    }
     
     //Serial.print("Pitch, Roll, Yaw:\t");
     //Serial.print(pitch); Serial.print("\t");
@@ -326,8 +359,10 @@ void loop() {
     //Serial.print(ay); Serial.print("\t");
     //Serial.println(az);
       
-    delay(500);
-// }
+    input_manager.register_input(ax, ay, az, gx, gy, gz);
+    input_manager.serial_print();
+    delay(input_manager.get_loop_delay());
+ }
   // display tab-separated accel x/y/z values
   //    Serial.print("accel:\t");
   //    Serial.print(ax); Serial.print("\t");

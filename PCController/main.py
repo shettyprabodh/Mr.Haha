@@ -21,22 +21,25 @@ def press_spl_key(code):
                 9: keyboard.backspace_key}
     keyboard.tap_key(key_code[code])
 
-arduino = serial.Serial('/dev/ttyACM0', 9600)
+arduino = serial.Serial('/dev/ttyACM3', 9600)
 while True:
     line = arduino.readline()
-    result = line.split()
-    #t = (float(result[0])*100)
-    #print result[0]
-    result = map(lambda x: (0, float(x))[(float(x)) != 0.0], result)
-    print int(float(result[0])), int(float(result[1]))
-    print result
-    #if line[0] in ['-', '+']:
-    #    if line[0] == '-':
-    #        press_spl_key(int(line[1:]))
-    #    else:
-    #        keyboard.type_string(line[1])
-    #print line
-    mouse_x = center_x + int(result[0]*screen_size[0]/100.0)
-    mouse_y = center_y + int((result[1])*screen_size[1]/100.0)
-    print mouse_x/10 , mouse_y/10
-    mouse.move(mouse_x/10,mouse_y/10)
+    print line
+    if line[0] == "$":
+        line = line[1:]
+        result = line.split()
+        #t = (float(result[0])*100)
+        #print result[0]
+        result = map(lambda x: (0, float(x))[(float(x)) != 0.0], result)
+        #print int(float(result[0])), int(float(result[1]))
+        print result
+        mouse_x = center_x + int(result[0]*screen_size[0]/100.0)
+        mouse_y = center_y + int((result[1])*screen_size[1]/100.0)
+        #print mouse_x/10 , mouse_y/10
+        mouse.move(mouse_x,mouse_y)
+    elif line[0] in ['-', '+']:
+        if line[0] in ['-', '+']:
+           if line[0] == '-':
+               press_spl_key(int(line[1:]))
+           else:
+               keyboard.type_string(line[1])
