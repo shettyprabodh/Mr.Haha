@@ -84,10 +84,13 @@ public:
     return true;
   }
 };
-
+ 
 class InputProtocolManager {
+ public:
   enum InputMode {
-    SELECT, CONTROL, KEYBOARD, MOUSE, ROBOT  };
+      SELECT, CONTROL, KEYBOARD, MOUSE, ROBOT  };
+      
+ private:
   InputMode mode;
 
   int input_buf[3];
@@ -101,6 +104,7 @@ class InputProtocolManager {
   double roll_acc;
   double yaw_acc;
   
+  // Used for computing dt
   uint32_t timer;
 
   int get_accel_code(int16_t x, int16_t y, int16_t z) {
@@ -220,7 +224,10 @@ public:
     timer(micros())       //Initialize timer
   {}
   
-  void register_input (int16_t ax, int16_t ay, int16_t az, int16_t gx, int16_t gy, int16_t gz) {
+  void register_input (int16_t ax, int16_t ay, int16_t az) {
+    pitch = ax;
+    roll = ay;
+    yaw = az;
     if (mode != MOUSE) {
       register_input_code(get_accel_code(ax, ay, az));
       Serial.print("Code: ");
@@ -231,7 +238,12 @@ public:
       Serial.print(pitch); Serial.print("\t");
       Serial.print(roll); Serial.print("\t");
       Serial.println(yaw);
-    }
+      if (az > 0)
+        mode = SELECT;
+      }
+  }
+  
+  void register_gyroscope(int16_t ax, int16_t ay, int16_t az, int16_t gx, int16_t gy, int16_t gz) {
     // Estimate orientation from gyroscope
     double dt = (double)(micros() - timer) / 1000000; // Calculate delta time
     timer = micros();
@@ -246,6 +258,7 @@ public:
       pitch_acc = atan2((double)az, (double)ay) * 180 / M_PI;          //Raw accel data
       roll_acc = atan2((double)ax, (double)az) * 180 / M_PI;
       yaw_acc = atan2((double)ay, (double)ax) * 180 / M_PI;
+//      Serial.print(pitch_acc); Serial.print(' '); Serial.print(roll_acc); Serial.print(' '); Serial.println(yaw_acc);
     
       pitch = pitch * 0.98 + pitch_acc * 0.02;
       roll = roll * 0.98 + roll_acc * 0.02;
@@ -266,7 +279,7 @@ public:
   
   int16_t get_loop_delay() {
     if (mode == MOUSE)
-      return 100;
+      return 10;
     else if(mode == ROBOT)
       return 1000;
     else
@@ -278,6 +291,8 @@ public:
       return false;
      return true;
   }
+  
+  int get_mode() { return mode; }
 };
 
 // class default I2C address is 0x38
@@ -290,22 +305,36 @@ int16_t ax, ay, az;
 int16_t cx, cy, cz;
 int16_t gx, gy, gz;
 
-int x_trans = 0, n = 0;                 //For Bot control
 
 uint32_t timer;
 
 InputProtocolManager input_manager;
 
-const int button_pin = 36;
+const int button_pin = 50;
+const int led_1 = 24; // For mode
+const int led_2 = 28; // For mode
+const int led_3 = 32; // For mode
+const int led_4 = 36; // Blink on keypress
 
 void setup() {
   pinMode(button_pin, INPUT);
+  pinMode(led_1, OUTPUT);
+  pinMode(led_2, OUTPUT);
+  pinMode(led_3, OUTPUT);
+  pinMode(led_4, OUTPUT);
+  
+  pinMode(led_1 + 1, OUTPUT);
+  pinMode(led_2 + 1, OUTPUT);
+  pinMode(led_3 + 1, OUTPUT);
+  pinMode(led_4 + 1, OUTPUT);
+  
 
   // join I2C bus (I2Cdev library doesn't do this automatically)
   Wire.begin();
   Serial.begin(9600);
   Serial1.begin(9600);
-
+  
+  Serial.println("Starting ADHA");
   // Initialize devices
   //Serial.println("Initializing I2C devices...");
   accel.initialize();
@@ -313,7 +342,7 @@ void setup() {
   gyro.initialize();
 
   // verify connection
-  Serial.println("Testing device connections...");
+  Serial.println("Testing devi  ce connections...");
   Serial.println(accel.testConnection() ? "BMA150 connection successful" : "BMA150 connection failed");
   Serial.println(compass.testConnection() ? "HMC5883L connection successful" : "HMC5883L connection failed");
   Serial.println(gyro.testConnection() ? "ITG3200 connection successful" : "ITG3200 connection failed");
@@ -321,54 +350,62 @@ void setup() {
   accel.getAcceleration(&ax, &ay, &az);
   gyro.getRotation(&gx, &gy, &gz);
   
-  //pitch_acc = atan2((double)az, (double)ay) * 180 / M_PI;
-  //roll_acc = atan2((double)ax, (double)az) * 180 / M_PI;
-  //yaw_acc = atan2((double)ay, (double)ax) * 180 / M_PI;
-  
+  // Set LEDs ground pins
+  digitalWrite(led_1 + 1, HIGH);
+  digitalWrite(led_2 + 1, HIGH);
+  digitalWrite(led_3 + 1, HIGH);
+  digitalWrite(led_4 + 1, HIGH);
+  digitalWrite(led_4, HIGH);
 }
 
 void loop() {
- if (digitalRead(button_pin) || !input_manager.wait_for_button()) {
-    // read raw gyro measurements from device
-   
-    
-    accel.getAcceleration(&ax, &ay, &az);
-    //Serial.println(get_accel_code(ax, ay, az));
-    //input_manager.register_input(ax, ay, az);
-    //input_manager.serial_print();
-    //compass.getHeading(&cx, &cy, &cz);
-    gyro.getRotation(&gx, &gy, &gz);
-    
-    
-    
-    //Serial.print("Pitch, Roll, Yaw:\t");
-    //Serial.print(pitch); Serial.print("\t");
-    //Serial.print(roll); Serial.print("\t");
-    //Serial.println(yaw);
-    //Serial.println(x_trans);
-    
-    //Serial.print("accel:\t");
-    //Serial.print(pitch_acc); Serial.print("\t");
-    //Serial.print(roll_acc); Serial.print("\t");
-    //Serial.println(yaw_acc);
-    
-    //Serial.println(forceMagnitudeApprox);
-    // display tab-separated accel x/y/z values
-    //Serial.print("accel:\t");
-    //Serial.print(ax); Serial.print("\t");
-    //Serial.print(ay); Serial.print("\t");
-    //Serial.println(az);
-      
-    input_manager.register_input(ax, ay, az, gx, gy, gz);
+  // read raw gyroscope and accelerometer measurements 
+  // from device
+  accel.getAcceleration(&ax, &ay, &az);
+  gyro.getRotation(&gx, &gy, &gz);
+
+  if (digitalRead(button_pin)) { // For user to press
+    digitalWrite(led_4, LOW);
+    input_manager.register_input(ax, ay, az);
     input_manager.serial_print();
+    if (input_manager.get_mode() == InputProtocolManager::MOUSE)
+      Serial.println("#"); // Mouse click
     delay(input_manager.get_loop_delay());
- }
-  // display tab-separated accel x/y/z values
-  //    Serial.print("accel:\t");
-  //    Serial.print(ax); Serial.print("\t");
-  //    Serial.print(ay); Serial.print("\t");
-  //    Serial.println(az);
+    digitalWrite(led_4, HIGH);
+  }
+  
+  // If in mouse mode, send to PC if time is up
+  if (!input_manager.wait_for_button())
+    input_manager.register_input(ax, ay, az);
+  // Update gyroscope
+  input_manager.register_gyroscope(ax, ay, az, gx, gy, gz);
+  
+  // Show Leds
+  switch(input_manager.get_mode()) {
+    case 0:
+      digitalWrite(led_1, LOW);
+      digitalWrite(led_2, LOW);
+      digitalWrite(led_3, LOW);
+    break;
+    case 1:
+      digitalWrite(led_1, LOW);
+      digitalWrite(led_2, HIGH);
+      digitalWrite(led_3, HIGH);
+    break;
+    case 2:
+      digitalWrite(led_1, HIGH);
+      digitalWrite(led_2, LOW);
+      digitalWrite(led_3, HIGH);
+    break;
+    case 3:
+      digitalWrite(led_1, HIGH);
+      digitalWrite(led_2, HIGH);
+      digitalWrite(led_3, LOW);
+    break;
+    case 4:
+      digitalWrite(led_1, HIGH);
+      digitalWrite(led_2, LOW);
+      digitalWrite(led_3, LOW);
+    break;
+  }
 }
-
-
-
