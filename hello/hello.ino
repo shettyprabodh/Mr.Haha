@@ -227,13 +227,13 @@ void setup() {
   // Initialize devices
   Serial.println("Initializing I2C devices...");
   accel.initialize();
-  compass.initialize();
+  // compass.initialize();
   gyro.initialize();
 
   // verify connection
   Serial.println("Testing device connections...");
   Serial.println(accel.testConnection() ? "BMA150 connection successful" : "BMA150 connection failed");
-  Serial.println(compass.testConnection() ? "HMC5883L connection successful" : "HMC5883L connection failed");
+  // Serial.println(compass.testConnection() ? "HMC5883L connection successful" : "HMC5883L connection failed");
   Serial.println(gyro.testConnection() ? "ITG3200 connection successful" : "ITG3200 connection failed");
 }
 
